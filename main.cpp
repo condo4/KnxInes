@@ -9,66 +9,18 @@
 using namespace std;
 
 static bool running = true;
-static std::map<uint16_t, uint16_t> gadDpt;
-static std::map<uint16_t, std::string> gadInesCmd;
-static std::map<uint16_t, double> gadInesVal;
-static Ines ines;
 
-void gadRx(uint16_t src, uint16_t dest, unsigned char *payload)
-{
-    switch(getCmd(payload))
-    {
-    case CMD::READ:
-        std::cout << "READ:";
-        break;
-
-    case CMD::WRITE:
-        std::cout << "WRITE:";
-        break;
-
-    case CMD::RESPONSE:
-        std::cout << "RESPONSE:";
-        break;
-
-    case CMD::MEMWRITE:
-        std::cout << "MEMWRITE:";
-        break;
-    }
-    std::cout << phyToStr(src) << "->" << gadToStr(dest);
-
-    uint16_t dpt = gadDpt[dest];
-
-    if((dpt >> 8) == 9)
-    {
-        float val;
-        payload_to_dpt9(payload, &val);
-        std::cout << " " << val << "°C";
-    }
-    else
-    {
-        std::cout << " (" << (dpt >> 8) << " " << dpt << ")";
-    }
-
-    std::cout << std::endl;
-}
 
 int main()
 {
     fd_set readfds;
     Config conf("KnxInes");
-    KnxdConnection knxd(strToPhy(conf["physical_address"]) ,conf["knxd_url"]);
+    KnxdConnection knxd(strToPhy(conf["physical_address"]), conf["knxd_url"]);
+    Ines ines(knxd);
 
-    knxd.registerCallback(gadRx);
     for(const std::string &var: conf.array("knxines_vars"))
     {
-        auto s = split(var, '|');
-        if(s.size() == 3)
-        {
-            uint16_t gad = strToGad(s[1]);
-            knxd.subscribe(gad);
-            gadDpt[gad] = strToDpt(s[0]);
-            gadInesCmd[gad] = s[2];
-        }
+        ines.addConf(var);
     }
 
     knxd.connect();
@@ -93,7 +45,6 @@ int main()
 
         int activity = select( max_fd + 1 , &readfds, nullptr, nullptr, &tv);
 
-
         if ((activity < 0) && (errno != EINTR))
         {
             std::cerr << "select error" << std::endl;
@@ -102,24 +53,11 @@ int main()
         current = std::time(nullptr);
         if((current - last_time) > polling || activity == 0)
         {
-            std::cout << "POLL:" << std::asctime(std::localtime(&current)) << std::endl;
+            std::cout << "POLL:" << std::asctime(std::localtime(&current));
             last_time = current;
 
             knxd.keepalive();
-            for (auto const& x : gadInesCmd)
-            {
-                uint16_t gad = x.first;
-                double val = ines.get(x.second);
-                if(gadInesVal.count(gad) == 0) gadInesVal[gad] = 0;
-                if(std::abs(gadInesVal[gad] - val) > 0.1)
-                {
-                    gadInesVal[gad] = val;
-                    knxd.write(gad, gadDpt[gad], val);
-                }
-            }
-
-
-            //static std::map<uint16_t, std::string> gadInesCmd;
+            ines.process();
         }
 
         if (FD_ISSET(knxdfd, &readfds))

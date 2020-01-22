@@ -9,6 +9,7 @@
 #include <sstream>
 #include <map>
 #include "KnxdObject/utils.h"
+#include "KnxdObject/dpt.h"
 #include "JSON.h"
 
 static inline std::string readline(int sock)
@@ -123,9 +124,19 @@ std::string Ines::query_json(const std::string &query)
     return result;
 }
 
-Ines::Ines()
+static Ines *__instance = nullptr;
+static void gadrx(uint16_t src, uint16_t dest, unsigned char *payload)
 {
+    if(!__instance) return;
+std::cout << "gadrx" << std::endl;
+    __instance->rx(src, dest, payload);
+}
 
+Ines::Ines(KnxdConnection &knxd)
+    :m_knxd(knxd)
+{
+    __instance = this;
+    knxd.registerCallback(gadrx);
 }
 
 void Ines::setUrl(const std::string &url)
@@ -174,5 +185,92 @@ double Ines::get(std::string param)
         return 0;
     }
     return v->AsNumber();
+}
+
+void Ines::set(std::string cmd, double value)
+{
+    std::string url("/cgi-bin/sendmsg.lua?cmd=");
+    url.append(cmd);
+    url.append("+");
+    std::stringstream ss;
+    ss << static_cast<int>(value);
+    url.append(ss.str());
+    std::string tjson = query_json(url);
+    std::cout << "ASK SET " << url << " -> " << tjson << std::endl;
+}
+
+void Ines::rx(uint16_t src, uint16_t gad, unsigned char *payload)
+{
+    switch(getCmd(payload))
+    {
+
+    case CMD::WRITE:
+        std::cout << "WRITE:";
+        break;
+
+    case CMD::RESPONSE:
+        std::cout << "RESPONSE:";
+        break;
+
+    default:
+        break;
+    }
+    std::cout << phyToStr(src) << "->" << gadToStr(gad) << std::endl;
+
+    uint16_t dpt = m_gadDpt[gad];
+
+    if(getCmd(payload) == CMD::READ)
+    {
+        // Need to send response, last value quickly, then trig process for update value
+        if(m_gadFlags[gad].find("R") != std::string::npos)
+        {
+            m_knxd.response(gad, dpt, m_gadInesVal[gad]);
+        }
+    }
+    if(getCmd(payload) == CMD::WRITE)
+    {
+        if(m_gadFlags[gad].find("W") != std::string::npos)
+        {
+            switch(dpt) {
+            case DPT(9,1):
+                m_gadInesVal[gad] = 0;
+                break;
+            default:
+                break;
+            }
+
+        }
+    }
+}
+
+void Ines::addConf(const std::string &var)
+{
+    auto s = split(var, '|');
+    if(s.size() == 4)
+    {
+        uint16_t gad = strToGad(s[1]);
+        m_knxd.subscribe(gad);
+        m_gadDpt[gad] = strToDpt(s[0]);
+        m_gadInesCmd[gad] = s[2];
+        m_gadFlags[gad] = s[3];
+    }
+}
+
+void Ines::process()
+{
+    for (auto const& x : m_gadInesCmd)
+    {
+        uint16_t gad = x.first;
+        if(m_gadFlags[gad] == "CRT")
+        {
+            double val = get(x.second);
+            if(m_gadInesVal.count(gad) == 0) m_gadInesVal[gad] = 0;
+            if(std::abs(m_gadInesVal[gad] - val) > 0.1)
+            {
+                m_gadInesVal[gad] = val;
+                m_knxd.write(gad, m_gadDpt[gad], val);
+            }
+        }
+    }
 }
 
