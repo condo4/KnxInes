@@ -4,6 +4,7 @@
 #include "KnxdObject/utils.h"
 #include "KnxdObject/dpt.h"
 #include <ctime>
+#include <systemd/sd-daemon.h>
 #include "ines.h"
 
 using namespace std;
@@ -31,6 +32,13 @@ int main()
     std::cout << "Start main loop, polling: " << polling << "s" <<  std::endl;
     std::time_t last_time = 0;
     std::time_t current = std::time(nullptr);
+
+
+    /* Service is ready */
+    sd_notify(0, "READY=1");
+    ines.process();
+    knxd.process();
+
     /* EVENT LOOP */
     while(running)
     {
