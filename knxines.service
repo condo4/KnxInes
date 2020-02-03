@@ -1,0 +1,16 @@
+[Unit]
+Description=KNX Ines
+After=network.target knxd.service
+
+
+[Service]
+ExecStart=/usr/bin/knxinesd
+User=knxd
+Group=knxd
+Type=notify
+
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target network-online.target

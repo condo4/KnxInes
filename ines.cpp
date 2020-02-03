@@ -219,27 +219,47 @@ void Ines::rx(uint16_t src, uint16_t gad, unsigned char *payload)
 
     uint16_t dpt = m_gadDpt[gad];
 
-    if(getCmd(payload) == CMD::READ)
+    switch(getCmd(payload))
+    {
+    case CMD::READ:
     {
         // Need to send response, last value quickly, then trig process for update value
         if(m_gadFlags[gad].find("R") != std::string::npos)
         {
             m_knxd.response(gad, dpt, m_gadInesVal[gad]);
         }
+        break;
     }
-    if(getCmd(payload) == CMD::WRITE)
+    case CMD::WRITE:
     {
         if(m_gadFlags[gad].find("W") != std::string::npos)
         {
             switch(dpt) {
             case DPT(9,1):
-                m_gadInesVal[gad] = 0;
+            {
+                float value;
+                payload_to_dpt9(payload, &value);
+                std::string cmd = ("/cgi-bin/sendmsg.lua?cmd=" + m_gadInesCmd[gad].substr(2) + "+" + std::to_string(static_cast<int>(value)));
+                std::cout << "WRITE "
+                          << gadToStr(gad)
+                          << " "
+                          << dptToStr(dpt)
+                          << " "
+                          << m_gadFlags[gad]
+                          << ": "
+                          << value
+                          << " -> "
+                          << query_json(cmd)
+                          << std::endl;
+                m_gadInesVal[gad] = static_cast<double>(value);
                 break;
+            }
             default:
                 break;
             }
-
         }
+        break;
+    }
     }
 }
 

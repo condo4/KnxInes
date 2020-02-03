@@ -1,4 +1,17 @@
- 
+
+
+
+
+FAIRE LES SET SUR WRITE SI FLAG = CWU
+
+
+
+
+
+
+
+
+
 Pour GET, il faut spécifier les parametres à lire :
 GET+SETP
 Pour SET, il faut spécifier le paramètre à écrire et la valeur :
