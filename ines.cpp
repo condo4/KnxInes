@@ -201,6 +201,7 @@ void Ines::set(std::string cmd, double value)
 
 void Ines::rx(uint16_t src, uint16_t gad, unsigned char *payload)
 {
+    bool needtoproccess = false;
     switch(getCmd(payload))
     {
 
@@ -234,6 +235,7 @@ void Ines::rx(uint16_t src, uint16_t gad, unsigned char *payload)
     {
         if(m_gadFlags[gad].find("W") != std::string::npos)
         {
+            needtoproccess = true;
             switch(dpt) {
             case DPT(9,1):
             {
@@ -254,13 +256,35 @@ void Ines::rx(uint16_t src, uint16_t gad, unsigned char *payload)
                 m_gadInesVal[gad] = static_cast<double>(value);
                 break;
             }
+            case DPT(5,5):
+            {
+                unsigned char value;
+                payload_to_dpt5(payload, &value);
+                std::string cmd = ("/cgi-bin/sendmsg.lua?cmd=" + m_gadInesCmd[gad].substr(2) + "+" + std::to_string(static_cast<int>(value)));
+                std::cout << "WRITE "
+                          << gadToStr(gad)
+                          << " "
+                          << dptToStr(dpt)
+                          << " "
+                          << m_gadFlags[gad]
+                          << ": "
+                          << value
+                          << " -> "
+                          << query_json(cmd)
+                          << std::endl;
+                m_gadInesVal[gad] = static_cast<double>(value);
+                break;
+            }
             default:
+                std::cout << "NEED TO MANAGE WRITE FOR DPT " << dptToStr(dpt) << std::endl;
                 break;
             }
         }
         break;
     }
     }
+    if(needtoproccess)
+        process();
 }
 
 void Ines::addConf(const std::string &var)

@@ -41,8 +41,8 @@ inline void encode_dpt4(unsigned char *data, char value) {
     data[1] = static_cast<unsigned char>(value);
 }
 
-inline void decode_dpt5(const unsigned char *data, unsigned char *value) {
-    *value = data[1];
+inline void payload_to_dpt5(const unsigned char *data, unsigned char *value) {
+    *value = data[2];
 }
 
 inline void dpt5_to_payload(unsigned char *data, unsigned char value) {
