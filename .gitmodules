@@ -1,6 +1,3 @@
-[submodule "UnixConfig"]
-	path = UnixConfig
-	url = https://github.com/condo4/UnixConfig.git
 [submodule "KnxdObject"]
 	path = KnxdObject
 	url = https://github.com/condo4/KnxdObject.git
