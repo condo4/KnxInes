@@ -73,9 +73,9 @@ std::string Ines::query_json(const std::string &query)
     std::cout << "query_json(" << query << ")" << std::endl;
     bzero(&client, sizeof(client));
     client.sin_family = AF_INET;
-    client.sin_port = htons( m_port );
+    client.sin_port = htons( getPort() );
     // Convert IPv4 and IPv6 addresses from text to binary form
-    if(inet_pton(AF_INET, m_hostname.data(), &client.sin_addr) <= 0)
+    if(inet_pton(AF_INET, getHostname().data(), &client.sin_addr) <= 0)
     {
        std::cerr << "Invalid address / Address not supported" << std::endl;
        return "";
@@ -128,38 +128,16 @@ std::string Ines::query_json(const std::string &query)
     return result;
 }
 
-static Ines *__instance = nullptr;
-static void gadrx(uint16_t src, uint16_t dest, unsigned char *payload)
+Ines::Ines(): KnxDevice("KnxInes")
 {
-    if(!__instance) return;
-    __instance->rx(src, dest, payload);
+    knxConnect();
+
 }
 
-Ines::Ines(KnxdConnection &knxd)
-    :m_knxd(knxd)
-{
-    __instance = this;
-    knxd.registerCallback(gadrx);
-}
 
-void Ines::setUrl(const std::string &url)
-{
-    size_t sep = url.find(":");
-    setHostname(url.substr(0, sep));
-    setPort(static_cast<unsigned short>(std::stoul((url.substr(sep + 1)))));
-}
 
-void Ines::setHostname(const std::string &hostname)
-{
-    m_hostname = hostname;
-}
 
-void Ines::setPort(unsigned short port)
-{
-    m_port = port;
-}
-
-double Ines::get(std::string param)
+double Ines::getFromDevice(std::string param)
 {
     std::vector<std::string> p = split(param.substr(2), '/');
     std::string cmd = p[0];
@@ -171,7 +149,7 @@ double Ines::get(std::string param)
     std::wstring path = std::wstring(p[1].begin(), p[1].end());
     std::wstring field = std::wstring(p[2].begin(), p[2].end());
 
-    if(std::time(nullptr) - m_jsonv.first > 30)
+    if(std::time(nullptr) - getTime() > 30)
     {
         std::string url("/cgi-bin/sendmsg.lua?cmd=GET+ALLS");
         std::string tjson = query_json(url);
@@ -193,14 +171,14 @@ double Ines::get(std::string param)
         }
         else
         {
-            m_jsonv = std::make_pair(std::time(nullptr), jsv);
+            m_jsonv = jsv;
         }
     }
 
-    auto v = m_jsonv.second->Child(path.c_str())->Child(field.c_str());
+    auto v = m_jsonv->Child(path.c_str())->Child(field.c_str());
     if(v == nullptr)
     {
-        std::wstring ws(m_jsonv.second->Stringify(true));
+        std::wstring ws(m_jsonv->Stringify(true));
         std::string log( ws.begin(), ws.end() );
         std::cerr << "Fail to resolve " << param << " in " << log << std::endl;
         return 0;
@@ -209,125 +187,53 @@ double Ines::get(std::string param)
 }
 
 
-void Ines::rx(uint16_t src, uint16_t gad, unsigned char *payload)
+double Ines::sendToDevice(uint16_t gad, unsigned char *payload)
 {
-    bool needtoproccess = false;
-    switch(getCmd(payload))
+    uint16_t dpt = dptFromGad(gad);
+    switch(dpt)
     {
-
-    case CMD::WRITE:
-        std::cout << "WRITE:";
-        break;
-
-    case CMD::RESPONSE:
-        std::cout << "RESPONSE:";
-        break;
-
-    default:
-        break;
-    }
-    std::cout << phyToStr(src) << "->" << gadToStr(gad) << std::endl;
-
-    uint16_t dpt = m_gadDpt[gad];
-
-    switch(getCmd(payload))
-    {
-    case CMD::READ:
-    {
-        // Need to send response, last value quickly, then trig process for update value
-        if(m_gadFlags[gad].find("R") != std::string::npos)
+        case DPT(9,1):
         {
-            m_knxd.response(gad, dpt, m_gadInesVal[gad]);
+            float value;
+            payload_to_dpt9(payload, &value);
+            std::string cmd = ("/cgi-bin/sendmsg.lua?cmd=" + cmdFromGad(gad).substr(2) + "+" + std::to_string(static_cast<int>(value)));
+            std::cout << "WRITE "
+                      << gadToStr(gad)
+                      << " "
+                      << dptToStr(dpt)
+                      << " "
+                      << flagFromGad(gad)
+                      << ": "
+                      << value
+                      << " -> "
+                      << query_json(cmd)
+                      << std::endl;
+            return static_cast<double>(value);
         }
-        break;
-    }
-    case CMD::WRITE:
-    {
-        if(m_gadFlags[gad].find("W") != std::string::npos)
+        case DPT(5,5):
         {
-            needtoproccess = true;                           
-            m_jsonv.first = 0; // Reset cache
-            switch(dpt) {
-            case DPT(9,1):
-            {
-                float value;
-                payload_to_dpt9(payload, &value);
-                std::string cmd = ("/cgi-bin/sendmsg.lua?cmd=" + m_gadInesCmd[gad].substr(2) + "+" + std::to_string(static_cast<int>(value)));
-                std::cout << "WRITE "
-                          << gadToStr(gad)
-                          << " "
-                          << dptToStr(dpt)
-                          << " "
-                          << m_gadFlags[gad]
-                          << ": "
-                          << value
-                          << " -> "
-                          << query_json(cmd)
-                          << std::endl;
-                m_gadInesVal[gad] = static_cast<double>(value);
-                break;
-            }
-            case DPT(5,5):
-            {
-                unsigned char value;
-                payload_to_dpt5(payload, &value);
-                std::string cmd = ("/cgi-bin/sendmsg.lua?cmd=" + m_gadInesCmd[gad].substr(2) + "+" + std::to_string(static_cast<int>(value)));
-                std::cout << "WRITE "
-                          << gadToStr(gad)
-                          << " "
-                          << dptToStr(dpt)
-                          << " "
-                          << m_gadFlags[gad]
-                          << ": "
-                          << value
-                          << " -> "
-                          << query_json(cmd)
-                          << std::endl;
-                m_gadInesVal[gad] = static_cast<double>(value);
-                break;
-            }
-            default:
-                std::cout << "NEED TO MANAGE WRITE FOR DPT " << dptToStr(dpt) << std::endl;
-                break;
-            }
+            unsigned char value;
+            payload_to_dpt5(payload, &value);
+            std::string cmd = ("/cgi-bin/sendmsg.lua?cmd=" + cmdFromGad(gad).substr(2) + "+" + std::to_string(static_cast<int>(value)));
+            std::cout << "WRITE "
+                      << gadToStr(gad)
+                      << " "
+                      << dptToStr(dpt)
+                      << " "
+                      << flagFromGad(gad)
+                      << ": "
+                      << value
+                      << " -> "
+                      << query_json(cmd)
+                      << std::endl;
+            return static_cast<double>(value);
         }
-        break;
+        default:
+            std::cout << "NEED TO MANAGE WRITE FOR DPT " << dptToStr(dpt) << std::endl;
+            break;
     }
-    default:
-        break;
-    }
-    if(needtoproccess)
-        process();
+    return 0;
 }
 
-void Ines::addConf(const std::string &var)
-{
-    auto s = split(var, '|');
-    if(s.size() == 4)
-    {
-        uint16_t gad = strToGad(s[1]);
-        m_knxd.subscribe(gad);
-        m_gadDpt[gad] = strToDpt(s[0]);
-        m_gadInesCmd[gad] = s[2];
-        m_gadFlags[gad] = s[3];
-    }
-}
 
-void Ines::process()
-{
-    for (auto const& x : m_gadInesCmd)
-    {
-        uint16_t gad = x.first;
-        if(m_gadFlags[gad] == "CRT")
-        {
-            double val = get(x.second);
-            if(m_gadInesVal.count(gad) == 0) m_gadInesVal[gad] = 0;
-            if(std::abs(m_gadInesVal[gad] - val) > 0.1)
-            {
-                m_gadInesVal[gad] = val;
-                m_knxd.write(gad, m_gadDpt[gad], val);
-            }
-        }
-    }
-}
 
