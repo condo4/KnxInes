@@ -1,26 +1,3 @@
-
-
-
-
-FAIRE LES SET SUR WRITE SI FLAG = CWU
-
-
-
-
-
-
-
-
-
-Pour GET, il faut spécifier les parametres à lire :
-GET+SETP
-Pour SET, il faut spécifier le paramètre à écrire et la valeur :
-SET+SETP+20
-
-Le séparateur utilisé ici est le caractère '+'.
-Sur les autres Thread, on peux remarquer que la chaine "%20" était utilisée. Elle fonctionne aussi mais je la trouve moins lisible et les appli Palazzetti utilisent le '+'
-
-
 Les commandes de lecture
 
 Pour info, je ne liste que les commandes "utiles" à des fins de contrôle/domotisation même si d'autres commandes existent.
@@ -67,9 +44,7 @@ EXT+ADRD+207C+1 : Obtient le nombre d'allumage manqué (à confirmer)
 EXT+ADRD+207A+1 : Obtient le nombre d'erreur pour cause de surchauffe
 
 
-
 Les commandes d'écriture/Contrôle du poêle
-
 
 
 CMD+ON : Allumage du Poêle
@@ -77,3 +52,23 @@ CMD+OFF : Extinction du Poêle
 SETP+20 : réglage de la consigne à la température désirée
 RFAN+1 : réglage de la vitesse de ventilation (de 0 à 5; 0 étant le mode auto)
 POWR+1 : réglage de la puissance de chauffe (de 1 à 5)
+
+GET+ALLS still unknown
+
+STOPPED:
+"LSTATUS":51,
+"F2LF":2,
+"PUMP":0,
+"CHRSTATUS":0,
+"F1V":0,
+"FANLMINMAX":[0,5,0,1,0,1],
+"FDR":0,
+"IN":13,
+"OUT":0,
+"F2V":0,
+"DPT":0,
+"APLWDAY":6,
+"STATUS":9,
+"F2L":7,
+"DP":119,
+"F1RPM":0,
