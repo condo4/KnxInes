@@ -5,6 +5,9 @@
 #include <unistd.h>
 #include <cstring>
 #include <iostream>
+#include <iomanip>
+#include <ctime>
+#include <fstream>
 #include <memory>
 #include <sstream>
 #include <map>
@@ -67,6 +70,7 @@ std::string Ines::query_json(const std::string &query)
     int sock;
     std::string result;
 
+    std::cout << "query_json(" << query << ")" << std::endl;
     bzero(&client, sizeof(client));
     client.sin_family = AF_INET;
     client.sin_port = htons( m_port );
@@ -74,20 +78,20 @@ std::string Ines::query_json(const std::string &query)
     if(inet_pton(AF_INET, m_hostname.data(), &client.sin_addr) <= 0)
     {
        std::cerr << "Invalid address / Address not supported" << std::endl;
-       exit(2);
+       return "";
     }
 
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
         std::cout << "Error creating socket." << std::endl;
-        exit(1);
+        return "";
     }
 
     if ( connect(sock, reinterpret_cast<struct sockaddr *>(&client), sizeof(client)) < 0 )
     {
         close(sock);
         std::cout << "Could not connect" << std::endl;
-        exit(1);
+        return "";
     }
 
     std::stringstream ss;
@@ -128,7 +132,6 @@ static Ines *__instance = nullptr;
 static void gadrx(uint16_t src, uint16_t dest, unsigned char *payload)
 {
     if(!__instance) return;
-std::cout << "gadrx" << std::endl;
     __instance->rx(src, dest, payload);
 }
 
@@ -160,26 +163,44 @@ double Ines::get(std::string param)
 {
     std::vector<std::string> p = split(param.substr(2), '/');
     std::string cmd = p[0];
+    if(cmd != "GET+ALLS")
+    {
+        std::cerr << "Unkonw path " << p[1];
+        return 0;
+    }
     std::wstring path = std::wstring(p[1].begin(), p[1].end());
     std::wstring field = std::wstring(p[2].begin(), p[2].end());
 
-    std::string url("/cgi-bin/sendmsg.lua?cmd=");
-    url.append(cmd);
-    std::string tjson = query_json(url);
-    std::shared_ptr<JSONValue> jsv = std::shared_ptr<JSONValue>(JSON::Parse(tjson.c_str()));
-    if(jsv == nullptr)
+    if(std::time(nullptr) - m_jsonv.first > 30)
     {
-        std::cerr << "Can't use simple json" << std::endl;
-    }
-    else
-    {
-        m_jsonv[param] = std::make_pair(std::time(nullptr), jsv);
+        std::string url("/cgi-bin/sendmsg.lua?cmd=GET+ALLS");
+        std::string tjson = query_json(url);
+
+        std::ofstream logfile;
+        logfile.open("/var/log/ines.log", std::ios_base::app);
+        //logfile.open("ines.log", std::ios_base::app);
+        auto t = std::time(nullptr);
+        auto tm = *std::localtime(&t);
+        logfile << std::put_time(&tm, "%d-%m-%Y %H-%M-%S") << ":" << tjson << std::endl;
+        logfile.close();
+
+
+        std::shared_ptr<JSONValue> jsv = std::shared_ptr<JSONValue>(JSON::Parse(tjson.c_str()));
+
+        if(jsv == nullptr)
+        {
+            std::cerr << "Can't use simple json" << std::endl;
+        }
+        else
+        {
+            m_jsonv = std::make_pair(std::time(nullptr), jsv);
+        }
     }
 
-    auto v = m_jsonv[param].second->Child(path.c_str())->Child(field.c_str());
+    auto v = m_jsonv.second->Child(path.c_str())->Child(field.c_str());
     if(v == nullptr)
     {
-        std::wstring ws(m_jsonv[param].second->Stringify(true));
+        std::wstring ws(m_jsonv.second->Stringify(true));
         std::string log( ws.begin(), ws.end() );
         std::cerr << "Fail to resolve " << param << " in " << log << std::endl;
         return 0;
@@ -187,17 +208,6 @@ double Ines::get(std::string param)
     return v->AsNumber();
 }
 
-void Ines::set(std::string cmd, double value)
-{
-    std::string url("/cgi-bin/sendmsg.lua?cmd=");
-    url.append(cmd);
-    url.append("+");
-    std::stringstream ss;
-    ss << static_cast<int>(value);
-    url.append(ss.str());
-    std::string tjson = query_json(url);
-    std::cout << "ASK SET " << url << " -> " << tjson << std::endl;
-}
 
 void Ines::rx(uint16_t src, uint16_t gad, unsigned char *payload)
 {
@@ -235,7 +245,23 @@ void Ines::rx(uint16_t src, uint16_t gad, unsigned char *payload)
     {
         if(m_gadFlags[gad].find("W") != std::string::npos)
         {
-            needtoproccess = true;
+            needtoproccess = true;                           
+            m_jsonv.first = 0; // Reset cache
+            switch(dpt) {
+            case DPT(9,1):
+            {
+                float value;
+                payload_to_dpt9(payload, &value);
+                std::string cmd = ("/cgi-bin/sendmsg.lua?cmd=" + m_gadInesCmd[gad].substr(2) + "+" + std::to_string(static_cast<int>(value)));
+                std::cout << "WRITE "
+                          << gadToStr(gad)
+                          << " "
+                          << dptToStr(dpt)
+                          << " "
+                          << m_gadFlags[gad]
+                          << ": "
+                          << value
+                          << " -> "
             switch(dpt) {
             case DPT(9,1):
             {
@@ -282,6 +308,8 @@ void Ines::rx(uint16_t src, uint16_t gad, unsigned char *payload)
         }
         break;
     }
+    default:
+        break;
     }
     if(needtoproccess)
         process();
