@@ -262,21 +262,6 @@ void Ines::rx(uint16_t src, uint16_t gad, unsigned char *payload)
                           << ": "
                           << value
                           << " -> "
-            switch(dpt) {
-            case DPT(9,1):
-            {
-                float value;
-                payload_to_dpt9(payload, &value);
-                std::string cmd = ("/cgi-bin/sendmsg.lua?cmd=" + m_gadInesCmd[gad].substr(2) + "+" + std::to_string(static_cast<int>(value)));
-                std::cout << "WRITE "
-                          << gadToStr(gad)
-                          << " "
-                          << dptToStr(dpt)
-                          << " "
-                          << m_gadFlags[gad]
-                          << ": "
-                          << value
-                          << " -> "
                           << query_json(cmd)
                           << std::endl;
                 m_gadInesVal[gad] = static_cast<double>(value);
