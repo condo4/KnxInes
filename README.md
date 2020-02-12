@@ -52,23 +52,41 @@ CMD+OFF : Extinction du Poêle
 SETP+20 : réglage de la consigne à la température désirée
 RFAN+1 : réglage de la vitesse de ventilation (de 0 à 5; 0 étant le mode auto)
 POWR+1 : réglage de la puissance de chauffe (de 1 à 5)
+F1: Internal Fan
+Speed        "F1RPM":   1506
+Power Supply "F1V":     100
+
+F2: Room fan
+Consigne     "F2L":  0   1   2   3   4   5   6   7
+???          "F2LF": 0   0   0   0   0   0   1   2
+Power Supply "F2V":  0   150 160 170 180 200 165 156
+
+
+Feeder: "FDR": 0.9 DPT9.025 3/0/14
+
+ON/OFF    3/0/5
+"F2L":  
+"F2LF":
+"F2V":    3/0/11
+"F1V":    3/0/12
+"F1RPM":  3/0/13
 
 GET+ALLS still unknown
 
-STOPPED:
-"LSTATUS":51,
-"F2LF":2,
-"PUMP":0,
-"CHRSTATUS":0,
-"F1V":0,
-"FANLMINMAX":[0,5,0,1,0,1],
-"FDR":0,
-"IN":13,
-"OUT":0,
-"F2V":0,
-"DPT":0,
-"APLWDAY":6,
-"STATUS":9,
-"F2L":7,
-"DP":119,
-"F1RPM":0,
+
+    "DATA": {
+        "DP": 1189,
+        "DPT": 1170,
+        "FANLMINMAX": [
+            0,
+            5,
+            0,
+            1,
+            0,
+            1
+        ],
+        "IN": 15,
+        "LSTATUS": 6,
+        "OUT": 6,
+    },
+
