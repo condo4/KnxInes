@@ -70,7 +70,9 @@ std::string Ines::query_json(const std::string &query)
     int sock;
     std::string result;
 
+#ifdef DEBUG
     std::cout << "query_json(" << query << ")" << std::endl;
+#endif
     bzero(&client, sizeof(client));
     client.sin_family = AF_INET;
     client.sin_port = htons( getPort() );
@@ -153,16 +155,6 @@ double Ines::getFromDevice(std::string param)
     {
         std::string url("/cgi-bin/sendmsg.lua?cmd=GET+ALLS");
         std::string tjson = query_json(url);
-
-        std::ofstream logfile;
-        logfile.open("/var/log/ines.log", std::ios_base::app);
-        //logfile.open("ines.log", std::ios_base::app);
-        auto t = std::time(nullptr);
-        auto tm = *std::localtime(&t);
-        logfile << std::put_time(&tm, "%d-%m-%Y %H-%M-%S") << ":" << tjson << std::endl;
-        logfile.close();
-
-
         std::shared_ptr<JSONValue> jsv = std::shared_ptr<JSONValue>(JSON::Parse(tjson.c_str()));
 
         if(jsv == nullptr)
